@@ -1,0 +1,40 @@
+name: Download curriculum uploads
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download files
+        run: |
+          wget -r -np -nH --cut-dirs=2 -R "index.html*" \
+            -I /wp-content/uploads/2022,/wp-content/uploads/2023,/wp-content/uploads/2024,/wp-content/uploads/2025,/wp-content/uploads/2026 \
+            -e robots=off --wait=0.5 \
+            https://curriculumresources.edu.gh/wp-content/uploads/
+
+      - name: Zip by year
+        run: |
+          for y in 2022 2023 2024 2025 2026; do
+            [ -d "$y" ] && zip -r "uploads_$y.zip" "$y"
+          done
+          ls -lh *.zip
+
+      - name: Upload as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uploads
+          path: "*.zip"
+
+      - name: Publish as GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "uploads-$(date +%Y%m%d)" *.zip \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Curriculum uploads $(date +%Y-%m-%d)" \
+            --notes "Downloaded from curriculumresources.edu.gh"
