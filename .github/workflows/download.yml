@@ -9,32 +9,39 @@ permissions:
 jobs:
   download:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        year: ["2022", "2023", "2024", "2025", "2026"]
     steps:
       - name: Download files
         run: |
-          wget -r -np -nH --cut-dirs=2 -R "index.html*" \
-            -I /wp-content/uploads/2022,/wp-content/uploads/2023,/wp-content/uploads/2024,/wp-content/uploads/2025,/wp-content/uploads/2026 \
-            -e robots=off --wait=0.5 \
-            https://curriculumresources.edu.gh/wp-content/uploads/
+          wget -r -np -nH --cut-dirs=2 -nv \
+            -e robots=off \
+            -A pdf,doc,docx,ppt,pptx,xls,xlsx,zip \
+            -R "index.html*" \
+            https://curriculumresources.edu.gh/wp-content/uploads/${{ matrix.year }}/
+          du -sh ${{ matrix.year }} || true
 
-      - name: Zip by year
-        run: |
-          for y in 2022 2023 2024 2025 2026; do
-            [ -d "$y" ] && zip -r "uploads_$y.zip" "$y"
-          done
-          ls -lh *.zip
+      - name: Zip
+        run: zip -r -0 "uploads_${{ matrix.year }}.zip" "${{ matrix.year }}"
 
-      - name: Upload as workflow artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: uploads
+          name: uploads-${{ matrix.year }}
           path: "*.zip"
 
-      - name: Publish as GitHub Release
-        env:
+  release:
+    needs: download
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: uploads-*
+          merge-multiple: true
+      - env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "uploads-$(date +%Y%m%d)" *.zip \
             --repo "$GITHUB_REPOSITORY" \
-            --title "Curriculum uploads $(date +%Y-%m-%d)" \
-            --notes "Downloaded from curriculumresources.edu.gh"
+            --title "Curriculum uploads $(date +%Y-%m-%d)"
